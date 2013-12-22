@@ -1,0 +1,75 @@
+REPORT zarc_example3.
+
+TYPE-POOLS abap.
+
+INCLUDE zarc. " this contains all ZARC classes needed
+
+PARAMETER devclass TYPE tadir-devclass DEFAULT 'SABP'.
+PARAMETER sysid_a TYPE tmscsys-sysnam DEFAULT 'DEV'.
+PARAMETER sysid_b TYPE tmscsys-sysnam DEFAULT 'QAS'.
+
+START-OF-SELECTION.
+
+* Output type
+  TYPES : BEGIN OF ty_output,
+            objtype TYPE svrs2_versionable_object-objtype,
+            objname TYPE svrs2_versionable_object-objname,
+            oref TYPE REF TO if_zarc_remote_compare,
+            ex_ofe TYPE REF TO cx_zarc_objfac_exception,
+            ex_ce TYPE REF TO cx_zarc_compare_exception,
+            ex_nie TYPE REF TO cx_zarc_notimplemented_ex,
+            changeflag TYPE flag,
+          END OF ty_output.
+
+* gets all objects from request TRKORR
+  FIELD-SYMBOLS <tadir_line> TYPE tadir.
+  DATA t_tadir TYPE TABLE OF tadir.
+  SELECT * FROM tadir INTO TABLE t_tadir WHERE devclass EQ devclass.
+
+  DATA : output_line TYPE ty_output,
+         t_output TYPE TABLE OF ty_output.
+
+  LOOP AT t_tadir ASSIGNING <tadir_line>.
+
+    CLEAR output_line.
+
+    output_line-objtype = <tadir_line>-object.
+    output_line-objname = <tadir_line>-obj_name.
+
+    TRY.
+
+*       Step 1: get an instance of IF_ZARC_REMOTE_COMPARE based on the OBJTYPE parameter
+        output_line-oref = cl_zarc_remote_compare=>factory( objtype = output_line-objtype objname = output_line-objname ).
+
+*       Step 2: add the systems you want to use for version comparison (you can compare QAS and PRD even if you're runing it on DEV, yay!)
+        output_line-oref->add_system_for_compare( sysid_a ).
+        output_line-oref->add_system_for_compare( sysid_b ).
+
+*       Step 3: execute the comparison, so that you can receive the true/false changeflag
+        output_line-changeflag = output_line-oref->run_comparison( ).
+
+        APPEND output_line TO t_output.
+
+      CATCH cx_zarc_objfac_exception INTO output_line-ex_ofe.
+*       This exception is thrown when the Step 1 fails. It can happen when there's no CL_ZARC_REMOTE_COMPARE_XXXX definition to be instantiated, where XXXX equals OBJTYPE parameter.
+      CATCH cx_zarc_compare_exception INTO output_line-ex_ce.
+*       This exception is thrown when the Step 3 fails. This can happen when you try to run the comparison before add at least two systems on Step 2.
+      CATCH cx_zarc_notimplemented_ex INTO output_line-ex_nie.
+*       This exception is thrown when the Step 3 fails. It means that something inside ZARC isn't quite ready yet. But the good news is that you can help us! :)
+
+    ENDTRY.
+
+  ENDLOOP.
+
+  DATA o_alv TYPE REF TO cl_salv_table.
+
+  TRY.
+      CALL METHOD cl_salv_table=>factory
+        IMPORTING
+          r_salv_table = o_alv
+        CHANGING
+          t_table      = t_output.
+    CATCH cx_salv_msg .
+  ENDTRY.
+
+  o_alv->display( ).
