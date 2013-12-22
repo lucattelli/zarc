@@ -1,0 +1,711 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZARC
+*&---------------------------------------------------------------------*
+
+INCLUDE lsvrxpin. " SAP's remote comparison type-pool declarations
+
+************************************************************************
+*** EXCEPTION CLASSES DEFINITION ***************************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       CLASS cx_zarc_objfac_exception DEFINITION
+*----------------------------------------------------------------------*
+* Exception class for object factory
+*----------------------------------------------------------------------*
+CLASS cx_zarc_objfac_exception DEFINITION INHERITING FROM cx_static_check.
+  PUBLIC SECTION.
+    DATA error_message TYPE bapiret2-message.
+    METHODS constructor IMPORTING message TYPE bapiret2-message.
+ENDCLASS.                    "cx_zarc_objfac_exception DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cx_zarc_compare_exception DEFINITION
+*----------------------------------------------------------------------*
+* Exception class for exceptions during object comparison
+*----------------------------------------------------------------------*
+CLASS cx_zarc_compare_exception DEFINITION INHERITING FROM cx_static_check.
+  PUBLIC SECTION.
+    DATA error_message TYPE bapiret2-message.
+    METHODS constructor IMPORTING message TYPE bapiret2-message.
+ENDCLASS.                    "cx_zarc_compare_exception DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cx_zarc_notimplemented_ex DEFINITION
+*----------------------------------------------------------------------*
+* Exception class to scream for developer's contribution :)
+*----------------------------------------------------------------------*
+CLASS cx_zarc_notimplemented_ex DEFINITION INHERITING FROM cx_static_check.
+  PUBLIC SECTION.
+    DATA error_message TYPE bapiret2-message.
+    METHODS constructor IMPORTING message TYPE bapiret2-message.
+ENDCLASS.                    "cx_zarc_notimplemented_ex DEFINITION
+
+************************************************************************
+*** EXCEPTION CLASSES IMPLEMENTATION ***********************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       CLASS cx_zarc_objfac_exception IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_zarc_objfac_exception IMPLEMENTATION.
+  METHOD constructor.
+    super->constructor( ).
+    me->error_message = message.
+  ENDMETHOD.                    "constructor
+ENDCLASS.                    "cx_zarc_objfac_exception IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cx_zarc_compare_exception IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_zarc_compare_exception IMPLEMENTATION.
+  METHOD constructor.
+    super->constructor( ).
+    me->error_message = message.
+  ENDMETHOD.                    "constructor
+ENDCLASS.                    "cx_zarc_compare_exception IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cx_zarc_notimplemented_ex IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cx_zarc_notimplemented_ex IMPLEMENTATION.
+  METHOD constructor.
+    super->constructor( ).
+    me->error_message = message.
+  ENDMETHOD.                    "constructor
+ENDCLASS.                    "cx_zarc_notimplemented_ex IMPLEMENTATION
+
+************************************************************************
+*** INTERFACE **********************************************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       INTERFACE if_zarc_remote_compare
+*----------------------------------------------------------------------*
+* Interface for abstract factory pattern implementation
+*----------------------------------------------------------------------*
+INTERFACE if_zarc_remote_compare.
+  METHODS : add_system_for_compare IMPORTING sysid TYPE tmscsys-sysnam,
+            run_comparison RETURNING value(changed) TYPE flag
+                           RAISING cx_zarc_compare_exception
+                                   cx_zarc_notimplemented_ex,
+            display_diff RAISING cx_zarc_notimplemented_ex.
+ENDINTERFACE.                    "if_zarc_remote_compare
+
+************************************************************************
+*** ENGINE CLASS DEFINITION ********************************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare DEFINITION
+*----------------------------------------------------------------------*
+* Base-class for ABAP object remote comparison
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare DEFINITION ABSTRACT.
+  PUBLIC SECTION.
+    INTERFACES if_zarc_remote_compare.
+    CLASS-METHODS : factory IMPORTING objtype TYPE svrs2_versionable_object-objtype
+                                      objname TYPE svrs2_versionable_object-objname
+                            RETURNING value(instance) TYPE REF TO if_zarc_remote_compare
+                            RAISING cx_zarc_objfac_exception.
+    METHODS : constructor IMPORTING objtype TYPE svrs2_versionable_object-objtype
+                                    objname TYPE svrs2_versionable_object-objname.
+  PROTECTED SECTION.
+    DATA : objtype TYPE svrs2_versionable_object-objtype,
+           objname TYPE svrs2_versionable_object-objname,
+           vtab TYPE TABLE OF svrs2_versionable_object.
+    CLASS-METHODS : get_finals_from_aliases CHANGING objtype TYPE svrs2_versionable_object-objtype
+                                                     objname TYPE svrs2_versionable_object-objname.
+    METHODS : compare_data IMPORTING a TYPE any
+                                     b TYPE any
+                           RETURNING value(changed) TYPE flag
+                           RAISING cx_zarc_compare_exception
+                                   cx_zarc_notimplemented_ex,
+              compare_table_data CHANGING ta TYPE ANY TABLE
+                                          tb TYPE ANY TABLE
+                                          changed TYPE flag,
+              sanitize_data CHANGING data TYPE ANY TABLE.
+ENDCLASS.                    "cl_zarc_remote_compare DEFINITION
+
+************************************************************************
+*** ENGINE CLASS IMPLEMENTATION ****************************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare IMPLEMENTATION.
+
+  METHOD factory.
+
+    DATA : final_objtype TYPE svrs2_versionable_object-objtype,
+           final_objname TYPE svrs2_versionable_object-objname.
+
+    final_objtype = objtype.
+    final_objname = objname.
+
+    get_finals_from_aliases( CHANGING objtype = final_objtype objname = final_objname ).
+
+    DATA classname TYPE string.
+
+    TRY.
+        CONCATENATE 'CL_ZARC_REMOTE_COMPARE_' final_objtype INTO classname.
+        FREE instance.
+        CLEAR instance.
+        CREATE OBJECT instance TYPE (classname)
+          EXPORTING
+            objtype = final_objtype
+            objname = final_objname.
+      CATCH cx_sy_create_object_error.
+        DATA error_message TYPE bapiret2-message.
+        CONCATENATE 'Cannot create object type' classname 'for' final_objtype final_objname INTO error_message SEPARATED BY space.
+        RAISE EXCEPTION TYPE cx_zarc_objfac_exception
+          EXPORTING
+            message = error_message.
+    ENDTRY.
+
+  ENDMETHOD.                    "factory
+
+  METHOD constructor.
+    me->objtype = objtype.
+    me->objname = objname.
+  ENDMETHOD.                    "constructor
+
+  METHOD if_zarc_remote_compare~add_system_for_compare.
+
+    DATA domain TYPE tmsdomnam.
+    CALL FUNCTION 'TMS_CFG_GET_DOMAIN_NAME'
+      EXPORTING
+        iv_system      = sysid
+      IMPORTING
+        ev_domain_name = domain.
+
+    DATA destination TYPE tmscsys-desadm.
+    SELECT SINGLE desadm FROM tmscsys INTO destination
+      WHERE domnam EQ domain
+        AND sysnam EQ sysid
+        AND limbo  EQ abap_false.
+
+    DATA version TYPE svrs2_versionable_object.
+    version-objtype = me->objtype.
+    version-objname = me->objname.
+    version-destination = destination.
+
+    CALL FUNCTION 'SVRS_GET_VERSION_REMOTE'
+      EXPORTING
+        p_tarsystem         = sysid
+      CHANGING
+        object              = version
+      EXCEPTIONS
+        no_version          = 1
+        system_error        = 2
+        communication_error = 3
+        OTHERS              = 4.
+
+    APPEND version TO me->vtab.
+
+  ENDMETHOD.                    "if_zarc_remote_compare~add_system_for_compare
+
+  METHOD if_zarc_remote_compare~run_comparison.
+
+    DATA : va TYPE svrs2_versionable_object,
+           vb TYPE svrs2_versionable_object,
+           da TYPE string,
+           db TYPE string.
+
+    FIELD-SYMBOLS : <v> TYPE svrs2_versionable_object,
+                    <da> TYPE any,
+                    <db> TYPE any.
+
+    CONCATENATE : 'VA' me->objtype INTO da SEPARATED BY '-',
+                  'VB' me->objtype INTO db SEPARATED BY '-'.
+
+    ASSIGN (da) TO <da>.
+    CHECK sy-subrc IS INITIAL.
+
+    ASSIGN (db) TO <db>.
+    CHECK sy-subrc IS INITIAL.
+
+    LOOP AT me->vtab ASSIGNING <v>.
+      IF va IS INITIAL.
+        va = <v>.
+        CONTINUE.
+      ELSEIF vb IS INITIAL.
+        vb = <v>.
+      ELSE.
+        va = vb.
+        vb = <v>.
+      ENDIF.
+      changed = me->compare_data( a = <da> b = <db> ).
+      IF changed = abap_true.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.                    "if_zarc_remote_compare~run_comparison
+
+  METHOD if_zarc_remote_compare~display_diff.
+    DATA error_message TYPE bapiret2-message.
+    CONCATENATE 'Display diff not implemented in class CL_ZARC_REMOTE_COMPARE_' me->objtype INTO error_message.
+    RAISE EXCEPTION TYPE cx_zarc_notimplemented_ex
+      EXPORTING
+        message = error_message.
+  ENDMETHOD.                    "if_zarc_remote_compare~display_diff
+
+  METHOD get_finals_from_aliases.
+    CASE objtype.
+      WHEN 'DOMA'. objtype = 'DOMD'.
+      WHEN 'DTEL'. objtype = 'DTED'.
+      WHEN 'PROG'. objtype = 'REPS'.
+    ENDCASE.
+  ENDMETHOD.                    "get_finals_from_aliases
+
+  METHOD compare_data.
+    DATA error_message TYPE bapiret2-message.
+    CONCATENATE 'Comparison not implemented in class CL_ZARC_REMOTE_COMPARE_' me->objtype INTO error_message.
+    RAISE EXCEPTION TYPE cx_zarc_notimplemented_ex
+      EXPORTING
+        message = error_message.
+  ENDMETHOD.                    "compare_data
+
+  METHOD compare_table_data.
+    me->sanitize_data( CHANGING data = ta ).
+    me->sanitize_data( CHANGING data = tb ).
+    IF ta[] NE tb[].
+      changed = abap_true.
+    ENDIF.
+  ENDMETHOD.                    "compare_table_data
+
+  METHOD sanitize_data.
+    FIELD-SYMBOLS : <line> TYPE any,
+                    <as4user> TYPE any,
+                    <as4date> TYPE any,
+                    <as4time> TYPE any.
+    LOOP AT data ASSIGNING <line>.
+      ASSIGN ('<LINE>-AS4USER') TO <as4user>.
+      IF sy-subrc IS INITIAL.
+        CLEAR <as4user>.
+        UNASSIGN <as4user>.
+      ENDIF.
+      ASSIGN ('<LINE>-AS4DATE') TO <as4date>.
+      IF sy-subrc IS INITIAL.
+        CLEAR <as4date>.
+        UNASSIGN <as4date>.
+      ENDIF.
+      ASSIGN ('<LINE>-AS4TIME') TO <as4time>.
+      IF sy-subrc IS INITIAL.
+        CLEAR <as4time>.
+        UNASSIGN <as4time>.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.                    "sanitize_data
+
+ENDCLASS.                    "cl_zarc_remote_compare IMPLEMENTATION
+
+************************************************************************
+*** EXTENSION CLASSES DEFINITION ***************************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_domd DEFINITION
+*----------------------------------------------------------------------*
+* Class for handling DOMD object version comparison
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_domd DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_domd DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_dted DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_dted DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_dted DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_dynp DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_dynp DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_dynp DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_func DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_func DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_func DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_intf DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_intf DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_intf DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_mess DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_mess DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_mess DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_meth DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_meth DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_meth DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_reps DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_reps DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_reps DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_rept DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_rept DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_rept DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_tabd DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_tabd DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_tabd DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_tabt DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_tabt DEFINITION INHERITING FROM cl_zarc_remote_compare.
+  PROTECTED SECTION.
+    METHODS compare_data REDEFINITION.
+ENDCLASS.                    "cl_zarc_remote_compare_tabt DEFINITION
+
+************************************************************************
+*** EXTENSION CLASSES IMPLEMENTATION ***********************************
+************************************************************************
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_domd IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_domd IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_domd,
+           db TYPE svrs2_domd.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-dd01v tb = da-dd01v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd07tv tb = db-dd07tv changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd07v tb = db-dd07v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_domd IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_dted IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_dted IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_dted,
+           db TYPE svrs2_dted.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-dd04tv tb = db-dd04tv changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd04v tb = db-dd04v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_dted IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_dynp IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_dynp IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_dynp,
+           db TYPE svrs2_dynp.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-d020s tb = db-d020s changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-d020t tb = db-d020t changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-d021s tb = db-d021s changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-d021t tb = db-d021t changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-d022s tb = db-d022s changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-d023s tb = db-d023s changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_dynp IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_func IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_func IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_func,
+           db TYPE svrs2_func.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-abaptext tb = db-abaptext changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dincl tb = db-dincl changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-enlfd tb = db-enlfd changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-funct tb = db-funct changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-fupar tb = db-fupar changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-tfdir tb = db-tfdir changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-tftit tb = db-tftit changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_func IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_intf IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_intf IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_intf,
+           db TYPE svrs2_intf.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-alias tb = db-alias changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-attr tb = db-attr changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-compr tb = db-compr changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-event tb = db-event changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-excep tb = db-excep changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-intf tb = db-intf changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-meth tb = db-meth changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-param tb = db-param changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-preps tb = db-preps changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-reps tb = db-reps changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-type tb = db-type changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-typep tb = db-typep changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_intf IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_mess IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_mess IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_mess,
+           db TYPE svrs2_mess.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-langu tb = db-langu changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-t100 tb = db-t100 changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-t100o tb = db-t100o changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-t100u tb = db-t100u changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-t100x tb = db-t100x changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_mess IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_meth IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_meth IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_meth,
+           db TYPE svrs2_meth.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-abaptext tb = db-abaptext changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_meth IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_reps IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_reps IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_reps,
+           db TYPE svrs2_reps.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-abaptext tb = db-abaptext changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-trdirt tb = db-trdirt changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_reps IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_rept IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_rept IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_rept,
+           db TYPE svrs2_rept.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-textpool tb = db-textpool changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_rept IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_tabd IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_tabd IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_tabd,
+           db TYPE svrs2_tabd.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-dd02tv tb = db-dd02tv changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd02v tb = db-dd02v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd03tv tb = db-dd03tv changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd03v tb = db-dd03v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd05v tb = db-dd05v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd08tv tb = db-dd08tv changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd08v tb = db-dd08v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd35v tb = db-dd35v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-dd36v tb = db-dd36v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_tabd IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS cl_zarc_remote_compare_tabt IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS cl_zarc_remote_compare_tabt IMPLEMENTATION.
+  METHOD compare_data.
+    DATA : da TYPE svrs2_tabt,
+           db TYPE svrs2_tabt.
+    da = a.
+    db = b.
+    me->compare_table_data( CHANGING ta = da-dd09v tb = db-dd09v changed = changed ).
+    CHECK changed IS INITIAL.
+    me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
+    CHECK changed IS INITIAL.
+  ENDMETHOD.                    "compare_data
+ENDCLASS.                    "cl_zarc_remote_compare_tabt IMPLEMENTATION
