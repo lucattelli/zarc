@@ -1,0 +1,67 @@
+
+
+CLASS lcl_zarc_search_criteria DEFINITION CREATE PRIVATE.
+
+  PUBLIC SECTION.
+    INTERFACES zif_wb_search_criteria.
+
+ENDCLASS.
+
+
+CLASS lcl_zarc_search_criteria IMPLEMENTATION.
+
+  METHOD zif_wb_search_criteria~factory.
+    CREATE OBJECT re_search_criteria TYPE lcl_zarc_search_criteria.
+*    re_search_criteria->r_packages = im_packages
+*    re_search_criteria->r_reports = im_reports.
+    re_search_criteria->r_classes = im_classes.
+    re_search_criteria->r_interfaces = im_interfaces.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS lcl_zarc_search_criteriat DEFINITION FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+  PUBLIC SECTION.
+    METHODS factory_returnbound FOR TESTING.
+ENDCLASS.                    "lcl_yuml_wb_search_criteriat DEFINITION
+
+
+CLASS lcl_zarc_search_criteriat IMPLEMENTATION.
+
+  METHOD factory_returnbound.
+    DATA r_seach_criteria TYPE REF TO lcl_zarc_search_criteria.
+
+    r_seach_criteria ?= lcl_zarc_search_criteria=>zif_wb_search_criteria~factory(
+*      im_packages        =
+*      im_reports         =
+*      im_classes         =
+*      im_interfaces      =
+    ).
+
+    cl_abap_unit_assert=>assert_bound(
+        act              =  r_seach_criteria
+      msg              = 'ZARC search criteria not created'
+*      level            = IF_AUNIT_CONSTANTS=>CRITICAL
+*      quit             = IF_AUNIT_CONSTANTS=>METHOD
+  ).
+
+
+  ENDMETHOD.                    "factory_returnbound
+
+ENDCLASS.
+
+
+
+CLASS lcl_zarc_search_criteria_stub DEFINITION.
+  PUBLIC SECTION.
+    INTERFACES zif_wb_search_criteria.
+ENDCLASS.
+
+
+CLASS lcl_zarc_search_criteria_stub IMPLEMENTATION.
+  METHOD zif_wb_search_criteria~factory.
+    CREATE OBJECT re_search_criteria TYPE lcl_zarc_search_criteria_stub.
+  ENDMETHOD.                    "lif_wb_search_criteria~factory
+ENDCLASS.
