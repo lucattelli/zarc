@@ -1,0 +1,109 @@
+REPORT  zarc_example4.
+
+* Given a workbench search criteria using ABAP WB Objects Framework (classes and interfaces),
+* this program compares the versions of all repository objects inside it between two target systems.
+* Pre-requisites:
+* ABAP WB Objects Framework v 1.0 above installed
+* get it on: https://github.com/fabiopagoti/WB-Objects/blob/master/releases/NUGG_ABAP_WB_OBJECTS_V1_0.nugg
+
+INCLUDE zarc. " this contains all ZARC classes needed
+INCLUDE zarc_example4_wb_selection.
+
+SELECTION-SCREEN BEGIN OF BLOCK b_zarc_systems WITH FRAME TITLE text-002.
+PARAMETERS p_sysid1 TYPE tmscsys-sysnam DEFAULT 'NSP'.
+PARAMETERS p_sysid2 TYPE tmscsys-sysnam DEFAULT 'NSP'.
+SELECTION-SCREEN END OF BLOCK b_zarc_systems.
+
+SELECTION-SCREEN BEGIN OF BLOCK b_wb_criteria WITH FRAME TITLE text-001.
+
+* Variables for select-options
+DATA:
+*      v_package TYPE tdevc-devclass,
+      v_class   TYPE seoclass-clsname,
+      v_inter   TYPE seoclass-clsname.
+*      v_repor   TYPE reposrc-progname.
+
+*SELECT-OPTIONS s_packa FOR v_package.
+*SELECT-OPTIONS s_repor FOR v_repor.
+SELECT-OPTIONS s_class FOR v_class MATCHCODE OBJECT zyuml_class_name.
+SELECT-OPTIONS s_inter FOR v_inter MATCHCODE OBJECT zyuml_class_name.
+
+SELECTION-SCREEN END OF BLOCK b_wb_criteria.
+
+
+START-OF-SELECTION.
+
+* Map all WB search criteria from the selection screen into an YUML search criteria object
+  DATA o_zarc_search_criteria TYPE REF TO lcl_zarc_search_criteria.
+  o_zarc_search_criteria ?= lcl_zarc_search_criteria=>zif_wb_search_criteria~factory(
+      im_classes         = s_class[]
+      im_interfaces      = s_inter[]
+  ).
+
+* Search for WB Objects related to ABAP Objects (mainly classes and interfaces)
+  DATA o_wb_searcher_oo         TYPE REF TO zcl_wb_searcher_oo.
+  CREATE OBJECT o_wb_searcher_oo TYPE zcl_wb_searcher_oo.
+  o_wb_searcher_oo->zif_wb_searcher~search_wb_objects( im_wb_search_criteria = o_zarc_search_criteria ).
+
+* Once all WB Objects are fetched, they must be loaded into memory using WB mass loader.
+  DATA o_wb_mass_loader_searcher TYPE REF TO zcl_wb_mass_loader_oo_searcher.
+  DATA o_wb_objects_set_itab TYPE REF TO zif_wb_set_itab.
+
+  CREATE OBJECT o_wb_mass_loader_searcher
+    EXPORTING
+      im_o_wb_oo_searcher = o_wb_searcher_oo.
+
+  o_wb_objects_set_itab = o_wb_mass_loader_searcher->zif_wb_mass_loader~mass_load( ).
+
+
+  DATA o_zarc_comparator TYPE REF TO if_zarc_remote_compare.
+  DATA o_wa_object TYPE REF TO zif_wb_object.
+  DATA o_wb_global_class TYPE REF TO zcl_wb_class_global.
+  DATA o_wb_global_interface TYPE REF TO zcl_wb_interface_global.
+
+
+
+  DATA v_chk_different TYPE abap_bool.
+  DATA v_versobjnam TYPE versobjnam.
+
+  LOOP AT o_wb_objects_set_itab->t_wb_objects INTO o_wa_object.
+
+* Checks if it's an interface
+    TRY.
+        o_wb_global_interface ?= o_wa_object.
+        v_versobjnam = o_wb_global_interface->interface-clsname.
+
+*     Step 1: get an instance of IF_ZARC_REMOTE_COMPARE based on the OBJTYPE parameter
+        o_zarc_comparator = cl_zarc_remote_compare=>factory( objtype = 'INTF' objname = v_versobjnam ).
+
+      CATCH cx_sy_move_cast_error.
+    ENDTRY.
+
+
+* Checks if it's a class
+    TRY.
+        o_wb_global_class ?= o_wa_object.
+        v_versobjnam = o_wb_global_class->class-clsname.
+
+*     Step 1: get an instance of IF_ZARC_REMOTE_COMPARE based on the OBJTYPE parameter
+        o_zarc_comparator = cl_zarc_remote_compare=>factory( objtype = 'INTF' objname = v_versobjnam ).
+
+      CATCH cx_sy_move_cast_error.
+    ENDTRY.
+
+*     Step 2: add the systems you want to use for version comparison (you can compare QAS and PRD even if you're runing it on DEV, yay!)
+    o_zarc_comparator->add_system_for_compare( p_sysid1 ).
+    o_zarc_comparator->add_system_for_compare( p_sysid2 ).
+
+*     Step 3: execute the comparison, so that you can receive the true/false changeflag
+
+    v_chk_different = o_zarc_comparator->run_comparison( ).
+
+    IF v_chk_different = abap_false.
+      WRITE: v_versobjnam, 'are equal' COLOR 1.
+    ELSE.
+      WRITE: v_versobjnam, 'are NOT equal' COLOR 2.
+    ENDIF.
+    NEW-LINE.
+
+  ENDLOOP.
