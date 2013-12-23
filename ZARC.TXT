@@ -8,15 +8,19 @@ INCLUDE lsvrxpin. " SAP's remote comparison type-pool declarations
 *** EXCEPTION CLASSES DEFINITION ***************************************
 ************************************************************************
 
+class cx_zarc definition inheriting from cx_static_check abstract.
+  PUBLIC SECTION.
+    DATA error_message TYPE bapiret2-message read-only.
+    METHODS constructor IMPORTING message TYPE bapiret2-message.
+endclass.
+
 *----------------------------------------------------------------------*
 *       CLASS cx_zarc_objfac_exception DEFINITION
 *----------------------------------------------------------------------*
 * Exception class for object factory
 *----------------------------------------------------------------------*
-CLASS cx_zarc_objfac_exception DEFINITION INHERITING FROM cx_static_check.
-  PUBLIC SECTION.
-    DATA error_message TYPE bapiret2-message.
-    METHODS constructor IMPORTING message TYPE bapiret2-message.
+CLASS cx_zarc_objfac_exception DEFINITION INHERITING FROM cx_zarc.
+
 ENDCLASS.                    "cx_zarc_objfac_exception DEFINITION
 
 *----------------------------------------------------------------------*
@@ -24,10 +28,8 @@ ENDCLASS.                    "cx_zarc_objfac_exception DEFINITION
 *----------------------------------------------------------------------*
 * Exception class for exceptions during object comparison
 *----------------------------------------------------------------------*
-CLASS cx_zarc_compare_exception DEFINITION INHERITING FROM cx_static_check.
-  PUBLIC SECTION.
-    DATA error_message TYPE bapiret2-message.
-    METHODS constructor IMPORTING message TYPE bapiret2-message.
+CLASS cx_zarc_compare_exception DEFINITION INHERITING FROM cx_zarc.
+
 ENDCLASS.                    "cx_zarc_compare_exception DEFINITION
 
 *----------------------------------------------------------------------*
@@ -35,26 +37,27 @@ ENDCLASS.                    "cx_zarc_compare_exception DEFINITION
 *----------------------------------------------------------------------*
 * Exception class to scream for developer's contribution :)
 *----------------------------------------------------------------------*
-CLASS cx_zarc_notimplemented_ex DEFINITION INHERITING FROM cx_static_check.
-  PUBLIC SECTION.
-    DATA error_message TYPE bapiret2-message.
-    METHODS constructor IMPORTING message TYPE bapiret2-message.
+CLASS cx_zarc_notimplemented_ex DEFINITION INHERITING FROM cx_zarc.
+
 ENDCLASS.                    "cx_zarc_notimplemented_ex DEFINITION
 
 ************************************************************************
 *** EXCEPTION CLASSES IMPLEMENTATION ***********************************
 ************************************************************************
 
+class cx_zarc implementation.
+  METHOD constructor.
+    super->constructor( ).
+    me->error_message = message.
+  ENDMETHOD.                    "constructor
+endclass.
 *----------------------------------------------------------------------*
 *       CLASS cx_zarc_objfac_exception IMPLEMENTATION
 *----------------------------------------------------------------------*
 *
 *----------------------------------------------------------------------*
 CLASS cx_zarc_objfac_exception IMPLEMENTATION.
-  METHOD constructor.
-    super->constructor( ).
-    me->error_message = message.
-  ENDMETHOD.                    "constructor
+
 ENDCLASS.                    "cx_zarc_objfac_exception IMPLEMENTATION
 
 *----------------------------------------------------------------------*
@@ -63,10 +66,7 @@ ENDCLASS.                    "cx_zarc_objfac_exception IMPLEMENTATION
 *
 *----------------------------------------------------------------------*
 CLASS cx_zarc_compare_exception IMPLEMENTATION.
-  METHOD constructor.
-    super->constructor( ).
-    me->error_message = message.
-  ENDMETHOD.                    "constructor
+
 ENDCLASS.                    "cx_zarc_compare_exception IMPLEMENTATION
 
 *----------------------------------------------------------------------*
@@ -75,10 +75,7 @@ ENDCLASS.                    "cx_zarc_compare_exception IMPLEMENTATION
 *
 *----------------------------------------------------------------------*
 CLASS cx_zarc_notimplemented_ex IMPLEMENTATION.
-  METHOD constructor.
-    super->constructor( ).
-    me->error_message = message.
-  ENDMETHOD.                    "constructor
+
 ENDCLASS.                    "cx_zarc_notimplemented_ex IMPLEMENTATION
 
 ************************************************************************
