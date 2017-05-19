@@ -312,6 +312,11 @@ CLASS cl_zarc_remote_compare IMPLEMENTATION.
         CLEAR <as4time>.
         UNASSIGN <as4time>.
       ENDIF.
+      ASSIGN ('<LINE>-CHANGEDON') TO <as4date>.
+      IF sy-subrc IS INITIAL.
+        CLEAR <as4date>.
+        UNASSIGN <as4date>.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.                    "sanitize_data
 
@@ -517,6 +522,8 @@ CLASS cl_zarc_remote_compare_func IMPLEMENTATION.
            db TYPE svrs2_func.
     da = a.
     db = b.
+    SORT: da-funct BY parameter, db-funct BY parameter,
+          da-fupar BY pposition, db-fupar BY pposition.
     me->compare_table_data( CHANGING ta = da-abaptext tb = db-abaptext changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-dincl tb = db-dincl changed = changed ).
@@ -679,6 +686,8 @@ CLASS cl_zarc_remote_compare_tabd IMPLEMENTATION.
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-dd05v tb = db-dd05v changed = changed ).
     CHECK changed IS INITIAL.
+    DELETE da-dd08tv WHERE ddtext IS INITIAL.
+    DELETE db-dd08tv WHERE ddtext IS INITIAL.
     me->compare_table_data( CHANGING ta = da-dd08tv tb = db-dd08tv changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-dd08v tb = db-dd08v changed = changed ).
