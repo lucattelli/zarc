@@ -522,8 +522,6 @@ CLASS cl_zarc_remote_compare_func IMPLEMENTATION.
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-tftit tb = db-tftit changed = changed ).
     CHECK changed IS INITIAL.
-    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
-    CHECK changed IS INITIAL.
   ENDMETHOD.                    "compare_data
 ENDCLASS.                    "cl_zarc_remote_compare_func IMPLEMENTATION
 
@@ -559,8 +557,6 @@ CLASS cl_zarc_remote_compare_intf IMPLEMENTATION.
     me->compare_table_data( CHANGING ta = da-preps tb = db-preps changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-reps tb = db-reps changed = changed ).
-    CHECK changed IS INITIAL.
-    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-type tb = db-type changed = changed ).
     CHECK changed IS INITIAL.
@@ -608,8 +604,6 @@ CLASS cl_zarc_remote_compare_meth IMPLEMENTATION.
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
     CHECK changed IS INITIAL.
-    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
-    CHECK changed IS INITIAL.
   ENDMETHOD.                    "compare_data
 ENDCLASS.                    "cl_zarc_remote_compare_meth IMPLEMENTATION
 
@@ -627,8 +621,6 @@ CLASS cl_zarc_remote_compare_reps IMPLEMENTATION.
     me->compare_table_data( CHANGING ta = da-abaptext tb = db-abaptext changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
-    CHECK changed IS INITIAL.
-    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-trdirt tb = db-trdirt changed = changed ).
     CHECK changed IS INITIAL.
@@ -649,8 +641,6 @@ CLASS cl_zarc_remote_compare_rept IMPLEMENTATION.
     me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-textpool tb = db-textpool changed = changed ).
-    CHECK changed IS INITIAL.
-    me->compare_table_data( CHANGING ta = da-trdir tb = db-trdir changed = changed ).
     CHECK changed IS INITIAL.
   ENDMETHOD.                    "compare_data
 ENDCLASS.                    "cl_zarc_remote_compare_rept IMPLEMENTATION
