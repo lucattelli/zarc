@@ -302,6 +302,16 @@ CLASS cl_zarc_remote_compare IMPLEMENTATION.
         CLEAR <as4time>.
         UNASSIGN <as4time>.
       ENDIF.
+      ASSIGN ('<LINE>-DGEN') TO <as4date>.
+      IF sy-subrc IS INITIAL.
+        CLEAR <as4date>.
+        UNASSIGN <as4date>.
+      ENDIF.
+      ASSIGN ('<LINE>-TGEN') TO <as4time>.
+      IF sy-subrc IS INITIAL.
+        CLEAR <as4time>.
+        UNASSIGN <as4time>.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.                    "sanitize_data
 
@@ -484,6 +494,7 @@ CLASS cl_zarc_remote_compare_dynp IMPLEMENTATION.
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-d021s tb = db-d021s changed = changed ).
     CHECK changed IS INITIAL.
+    SORT: da-d021t BY fldn, db-d021t BY fldn.
     me->compare_table_data( CHANGING ta = da-d021t tb = db-d021t changed = changed ).
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-d022s tb = db-d022s changed = changed ).
