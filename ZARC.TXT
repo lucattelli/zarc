@@ -622,6 +622,8 @@ CLASS cl_zarc_remote_compare_reps IMPLEMENTATION.
     CHECK changed IS INITIAL.
     me->compare_table_data( CHANGING ta = da-mdlog tb = db-mdlog changed = changed ).
     CHECK changed IS INITIAL.
+    DELETE da-trdirt WHERE text IS INITIAL.
+    DELETE db-trdirt WHERE text IS INITIAL.
     me->compare_table_data( CHANGING ta = da-trdirt tb = db-trdirt changed = changed ).
     CHECK changed IS INITIAL.
   ENDMETHOD.                    "compare_data
